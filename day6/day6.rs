@@ -1,19 +1,22 @@
-use std::{fs, ops::Index, thread::sleep};
-use std::time;
+use std::{fs, collections::{HashMap, HashSet}};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct Point {
     x: isize,
     y: isize,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Eq for Point {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct Dir {
     x: i8,
     y: i8,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Eq for Dir {}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Guard {
     pos: Point,
     dir: Dir,
@@ -119,20 +122,19 @@ fn print_vec(vec: Vec<String>) {
     }
 }
 
-fn simulate_guard_movement(map: &mut Map) {
-    let mut out_of_map: bool = false;
+fn simulate_guard_movement(map: &mut Map) -> HashSet<Point> {
+    let mut out_of_map = false;
+    let mut result = HashSet::new();
 
     while !out_of_map {
-        // let mut cp = map.map.clone();
-        // let mut tmp = [0; 4];
-        // cp[map.guard.pos.y as usize].replace_range(map.guard.pos.x as usize..map.guard.pos.x as usize+1, map.guard.char.encode_utf8(&mut tmp));
-        // print_vec(cp);
+
         if 0 <= map.guard.pos.x
             && map.guard.pos.x < (map.width as isize)
             && 0 <= map.guard.pos.y
             && map.guard.pos.y < (map.height as isize)
         {
             let guard = map.guard;
+            result.insert(guard.pos);
             let new_pos = move_point(guard.pos, guard.dir);
 
             if 0 <= new_pos.x && new_pos.x < (map.width as isize) && 0 <= new_pos.y && new_pos.y < (map.height as isize)
@@ -155,6 +157,7 @@ fn simulate_guard_movement(map: &mut Map) {
             out_of_map = true;
         }
     }
+    return result;
 }
 
 fn count_x_in_map(map: Map) -> usize {
@@ -181,8 +184,79 @@ fn challenge1(map: Map) {
     println!("Challenge1: {}", count_x_in_map(map_clone));
 }
 
+fn does_guard_exit (map1: Map, extra_obstacle: &Point) -> bool {
+    let mut map = Map {
+        map: Vec::new(),
+        ..map1
+    };
+
+    for line in map1.map.into_iter() {
+        map.map.push(line);
+    }
+
+
+    let mut out_of_map = false;
+    let mut dir_at_pos : HashMap<Point, Vec<Dir>> = HashMap::new();
+
+    while !out_of_map {
+        let extra = extra_obstacle.clone();
+        if 0 <= map.guard.pos.x
+            && map.guard.pos.x < (map.width as isize)
+            && 0 <= map.guard.pos.y
+            && map.guard.pos.y < (map.height as isize)
+        {
+
+            let guard = map.guard;
+            let new_pos = move_point(guard.pos, guard.dir);
+
+            if 0 <= new_pos.x && new_pos.x < (map.width as isize) && 0 <= new_pos.y && new_pos.y < (map.height as isize)
+            {
+                let next: char = map.map[new_pos.y as usize].chars().nth(new_pos.x as usize).unwrap();
+
+                if dir_at_pos.get_mut(&new_pos).map_or(false, |l| l.contains(&guard.dir)) { return false; }
+
+                if new_pos == extra || next == '#'  {
+                    // println!("ROTATE");
+                    map.guard = rotate_guard(guard);
+                }
+                else {
+                    map.guard.pos = new_pos;
+                    map.map[new_pos.y as usize].replace_range(new_pos.x as usize..new_pos.x as usize + 1, "X");
+                    
+                    if !dir_at_pos.contains_key(&new_pos) { dir_at_pos.insert(new_pos, Vec::new()); }
+                    dir_at_pos.get_mut(&new_pos).unwrap().push(map.guard.dir);
+                }
+            }
+            else {
+                map.guard.pos = new_pos;
+            }
+
+        } else {
+            out_of_map = true;
+        }
+    }
+    return true;
+}
+
+fn challenge2(map: Map) {
+    let mut num_obs = 0;
+
+
+    let path = simulate_guard_movement(&mut map.clone());
+
+    let mut v = Vec::new();
+
+    for (i,p) in path.iter().enumerate() {
+        let cl = map.clone();
+        if *p != cl.guard.pos && !does_guard_exit(cl, &p) { v.push(p.clone()); }
+    }
+
+    println!("Challenge2: {}", v.len());
+}
+
 fn main() {
     let map: Map = read_input();
 
-    challenge1(map);
+    challenge1(map.clone());
+    challenge2(map.clone());
 }
